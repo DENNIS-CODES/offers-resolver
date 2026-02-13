@@ -26,7 +26,7 @@ then fetches outlets and their eligible offers using batched loaders.
 
 ### 1) Requirements
 - Node.js 20+
-- Docker (for local Postgres + Redis)
+- Docker (for local Postgres + Redis) (docker not necessary)
 
 ### 2) Install
 ```bash
