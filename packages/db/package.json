@@ -1,0 +1,24 @@
+{
+  "name": "@fusion/db",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "prisma:generate": "prisma generate --schema prisma/schema.prisma",
+    "prisma:migrate": "prisma migrate dev --schema prisma/schema.prisma",
+    "prisma:push": "prisma db push --schema prisma/schema.prisma",
+    "build": "echo \"db has no build\"",
+    "test": "echo \"db has no tests\"",
+    "lint": "echo \"db has no lint\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.6.0"
+  },
+  "devDependencies": {
+    "prisma": "^6.6.0",
+    "typescript": "^5.5.4"
+  }
+}

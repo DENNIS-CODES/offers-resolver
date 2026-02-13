@@ -1,0 +1,14 @@
+# Dependencies / builds
+node_modules/
+dist/
+coverage/
+.prisma/
+
+# OS / misc
+.DS_Store
+
+# Env files (never commit, anywhere)
+.env
+.env.*
+**/.env
+**/.env.*

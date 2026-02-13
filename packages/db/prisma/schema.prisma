@@ -1,0 +1,338 @@
+// packages\db\prisma\schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Core enums (kept minimal to reduce migration friction)
+────────────────────────────────────────────────────────────── */
+
+enum OfferKind {
+  CASHBACK
+  EXCLUSIVE
+  LOYALTY
+}
+
+enum ReviewStatusEnum {
+  Approved
+  Pending
+  Rejected
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Existing domain models (simplified + Prisma-friendly)
+   NOTE: These are the models described in the prompt.
+────────────────────────────────────────────────────────────── */
+
+model Review {
+  id     String          @id
+  status ReviewStatusEnum
+
+  Outlet                    Outlet?
+  PaybillOrTills            PaybillOrTill[]
+  CashbackConfiguration     CashbackConfiguration?
+  CashbackConfigurationTier CashbackConfigurationTier?
+  ExclusiveOffer            ExclusiveOffer?
+  LoyaltyProgram            LoyaltyProgram?
+  LoyaltyTier               LoyaltyTier?
+  MerchantLoyaltyRewards    MerchantLoyaltyReward[]
+}
+
+model Merchant {
+  id           String          @id
+  businessName String
+  status       String          // e.g., "Active"
+  category     String
+
+  LoyaltyProgram         LoyaltyProgram?
+  CashbackConfigurations CashbackConfiguration[]
+  ExclusiveOffers        ExclusiveOffer[]
+  Outlets                Outlet[]
+  CustomerTypes          CustomerType[]
+  OfferIndexes           OfferIndex[]
+}
+
+model Outlet {
+  id          String   @id
+  name        String
+  description String?
+  isActive    Boolean
+  merchantId  String
+  Merchant    Merchant @relation(fields: [merchantId], references: [id])
+
+  PaybillOrTills         PaybillOrTill[]
+  CashbackConfigurations CashbackConfiguration[]
+  ExclusiveOffers        ExclusiveOffer[]
+  OfferIndexOutlets      OfferIndexOutlet[]
+
+  Review   Review? @relation(fields: [reviewId], references: [id])
+  reviewId String? @unique
+}
+
+model PaybillOrTill {
+  id        String   @id
+  outletId  String
+  Outlet    Outlet   @relation(fields: [outletId], references: [id])
+  isActive  Boolean
+  deletedAt DateTime?
+  Review    Review?  @relation(fields: [reviewId], references: [id])
+  reviewId  String?
+}
+
+model CashbackConfiguration {
+  id                   String   @id
+  name                 String
+  startDate            DateTime?
+  endDate              DateTime?
+  isActive             Boolean  @default(true)
+  deletedAt            DateTime?
+  eligibleCustomerTypes String[] // e.g., ["All"], ["VIP", "Regular"]
+
+  merchantId String
+  Merchant   Merchant @relation(fields: [merchantId], references: [id])
+
+  Outlets Outlet[]
+
+  Review   Review? @relation(fields: [reviewId], references: [id])
+  reviewId String? @unique
+
+  netCashbackBudget  Decimal @default(0.0)
+  usedCashbackBudget Decimal @default(0.0)
+
+  CashbackConfigurationTiers CashbackConfigurationTier[]
+  OfferIndex                 OfferIndex?
+}
+
+model CashbackConfigurationTier {
+  id                      String   @id
+  cashbackConfigurationId String
+  CashbackConfiguration   CashbackConfiguration @relation(fields: [cashbackConfigurationId], references: [id])
+  isActive                Boolean  @default(true)
+  deletedAt               DateTime?
+  percentage              Int      // store as bps or percent integer, depends on your domain
+
+  Review   Review? @relation(fields: [reviewId], references: [id])
+  reviewId String? @unique
+}
+
+model ExclusiveOffer {
+  id                   String   @id
+  name                 String
+  description          String
+  startDate            DateTime
+  endDate              DateTime
+  isActive             Boolean  @default(true)
+  deletedAt            DateTime?
+  eligibleCustomerTypes String[]
+
+  merchantId String?
+  Merchant   Merchant? @relation(fields: [merchantId], references: [id])
+
+  Outlets Outlet[]
+
+  Review   Review? @relation(fields: [reviewId], references: [id])
+  reviewId String? @unique
+
+  netOfferBudget  Decimal @default(0.0)
+  usedOfferBudget Decimal @default(0.0)
+  OfferIndex      OfferIndex?
+}
+
+model LoyaltyProgram {
+  id           String   @id
+  name         String
+  isActive     Boolean  @default(true)
+  merchantId   String?  @unique
+  Merchant     Merchant? @relation(fields: [merchantId], references: [id])
+
+  LoyaltyTiers           LoyaltyTier[]
+  MerchantLoyaltyRewards MerchantLoyaltyReward[]
+
+  Review   Review? @relation(fields: [reviewId], references: [id])
+  reviewId String? @unique
+
+  pointsUsedInPeriod  Decimal @default(0)
+  pointsIssuedLimit   Decimal?
+  OfferIndex          OfferIndex?
+}
+
+model LoyaltyTier {
+  id              String   @id
+  name            String
+  isActive        Boolean  @default(true)
+  deletedAt       DateTime?
+  minCustomerType String   // e.g., "New", "Regular", "Vip"
+  loyaltyProgramId String
+  LoyaltyProgram  LoyaltyProgram @relation(fields: [loyaltyProgramId], references: [id])
+
+  Review   Review? @relation(fields: [reviewId], references: [id])
+  reviewId String? @unique
+}
+
+model MerchantLoyaltyReward {
+  id              String   @id
+  loyaltyProgramId String
+  LoyaltyProgram  LoyaltyProgram @relation(fields: [loyaltyProgramId], references: [id])
+  isActive        Boolean  @default(true)
+  Review          Review?  @relation(fields: [reviewId], references: [id])
+  reviewId        String?
+}
+
+/**
+ * CustomerType tracks user's relationship with merchants.
+ * This is your source of truth; we derive UserMerchantProfile from this.
+ */
+model CustomerType {
+  id         String   @id
+  userId     String
+  merchantId String
+  type       String
+
+  Merchant Merchant @relation(fields: [merchantId], references: [id])
+
+  @@unique([userId, merchantId])
+  @@index([userId])
+  @@index([merchantId])
+}
+
+/* ──────────────────────────────────────────────────────────────
+   NEW: Precomputed indexing tables for the hot offers endpoint
+────────────────────────────────────────────────────────────── */
+
+/**
+ * UserMerchantProfile stores user ↔ merchant effective customer type and rank.
+ * This avoids recomputing hierarchy in every offers query.
+ */
+model UserMerchantProfile {
+  id         String   @id @default(cuid())
+  userId     String
+  merchantId String
+  customerType String
+  rank       Int
+  computedAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([userId, merchantId])
+  @@index([userId, merchantId])
+  @@index([merchantId, rank])
+}
+
+/**
+ * OfferIndex represents a "query-optimized" view of an offer instance,
+ * regardless of whether it lives in CashbackConfiguration, ExclusiveOffer, or LoyaltyProgram.
+ *
+ * The index stores only the fields needed by the hot path:
+ * - approval/active snapshots
+ * - budget exhausted flag
+ * - max cashback percentage for fast filtering
+ * - date window fields for fast comparisons
+ */
+model OfferIndex {
+  id   String    @id @default(cuid())
+  kind OfferKind
+
+  merchantId String
+  Merchant   Merchant @relation(fields: [merchantId], references: [id])
+
+  cashbackConfigurationId String? @unique
+  CashbackConfiguration   CashbackConfiguration? @relation(fields: [cashbackConfigurationId], references: [id])
+
+  exclusiveOfferId String? @unique
+  ExclusiveOffer   ExclusiveOffer? @relation(fields: [exclusiveOfferId], references: [id])
+
+  loyaltyProgramId String? @unique
+  LoyaltyProgram   LoyaltyProgram? @relation(fields: [loyaltyProgramId], references: [id])
+
+  // snapshots & hot-path filters
+  isActiveSnapshot   Boolean
+  isApprovedSnapshot Boolean
+  deletedAtSnapshot  DateTime?
+  budgetExhausted    Boolean @default(false)
+
+  startDate DateTime?
+  endDate   DateTime?
+
+  // For cashback percentage filtering (store BPS for safe integer comparisons)
+  maxCashbackPercentBps Int?
+
+  computedAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  eligibleCustomerTypes OfferIndexCustomerType[]
+  outlets               OfferIndexOutlet[]
+  loyaltyTiers          LoyaltyTierIndex[]
+
+  @@index([kind, isActiveSnapshot, isApprovedSnapshot, budgetExhausted])
+  @@index([merchantId, kind])
+}
+
+/**
+ * Normalized eligible customer types for an OfferIndex.
+ * This replaces runtime `eligibleCustomerTypes: { has: ... }` array scans.
+ */
+model OfferIndexCustomerType {
+  id           String   @id @default(cuid())
+  offerIndexId String
+  customerType String
+
+  OfferIndex OfferIndex @relation(fields: [offerIndexId], references: [id], onDelete: Cascade)
+
+  @@unique([offerIndexId, customerType])
+  @@index([customerType, offerIndexId])
+}
+
+/**
+ * Precomputed mapping from OfferIndex to Outlet for fast `exists` checks.
+ */
+model OfferIndexOutlet {
+  id           String @id @default(cuid())
+  offerIndexId String
+  outletId     String
+
+  OfferIndex OfferIndex @relation(fields: [offerIndexId], references: [id], onDelete: Cascade)
+  Outlet     Outlet     @relation(fields: [outletId], references: [id], onDelete: Cascade)
+
+  @@unique([offerIndexId, outletId])
+  @@index([outletId, offerIndexId])
+}
+
+/**
+ * Normalized loyalty tier ranks per loyalty OfferIndex.
+ * Eligibility at query time becomes: EXISTS tierRank <= userRank.
+ */
+model LoyaltyTierIndex {
+  id           String   @id @default(cuid())
+  offerIndexId String
+  tierRank     Int
+  isActiveSnapshot   Boolean
+  isApprovedSnapshot Boolean
+  deletedAtSnapshot  DateTime?
+
+  OfferIndex OfferIndex @relation(fields: [offerIndexId], references: [id], onDelete: Cascade)
+
+  @@index([offerIndexId, tierRank])
+  @@index([tierRank])
+}
+
+/**
+ * Minimal job audit log for rebuilds (optional but helps in production).
+ * In a mature system, BullMQ already has retry state, but DB logs help debugging.
+ */
+model OfferIndexRebuildLog {
+  id        String   @id @default(cuid())
+  jobType   String
+  entityType String
+  entityId  String
+  status    String
+  attempts  Int      @default(0)
+  errorMessage String?
+  createdAt DateTime @default(now())
+
+  @@index([status, createdAt])
+  @@index([entityType, entityId, status])
+}

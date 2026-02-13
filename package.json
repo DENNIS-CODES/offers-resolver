@@ -1,0 +1,19 @@
+{
+  "name": "offers-resolver-optimizer",
+  "private": true,
+  "packageManager": "yarn@4.6.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "yarn workspace @fusion/api dev",
+    "build": "yarn workspaces foreach -pt run build",
+    "test": "yarn workspaces foreach -pt run test",
+    "lint": "yarn workspaces foreach -pt run lint",
+    "typecheck": "yarn workspaces foreach -pt run typecheck",
+    "db:generate": "yarn workspace @fusion/db prisma:generate",
+    "db:migrate": "yarn workspace @fusion/db prisma:migrate",
+    "db:push": "yarn workspace @fusion/db prisma:push"
+  }
+}
