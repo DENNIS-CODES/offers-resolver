@@ -26,7 +26,6 @@ enum ReviewStatusEnum {
 
 /* ──────────────────────────────────────────────────────────────
    Existing domain models (simplified + Prisma-friendly)
-   NOTE: These are the models described in the prompt.
 ────────────────────────────────────────────────────────────── */
 
 model Review {

@@ -12,3 +12,7 @@ coverage/
 .env.*
 **/.env
 **/.env.*
+
+# postgress set up commands
+setup-offers.ps1
+**/setup-offers.ps1
